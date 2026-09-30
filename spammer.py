@@ -44,7 +44,6 @@ class SpammerBackend:
 
     def _spam_loop(self):
         while self.running:
-            # 1. BASILI TUTULAN TUŞLARI FİLTRELE (Oyun içi kesintiyi önler)
             active_kbd = []
             for key in self.keyboard_keys:
                 try:
@@ -61,7 +60,6 @@ class SpammerBackend:
                 except Exception:
                     active_mouse.append(btn)
                     
-            # 2. SADECE AKTİF TUŞLARI SPAMLA
             for key in active_kbd:
                 try: keyboard.press(key)
                 except Exception: pass
@@ -86,7 +84,7 @@ class SpammerUI(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title("MC AutoKey Spammer")
-        self.geometry("380x560") # Arayüz elementleri için biraz daha genişletildi
+        self.geometry("380x560") 
         self.resizable(False, False)
         
         ctk.set_appearance_mode("dark")
@@ -96,7 +94,7 @@ class SpammerUI(ctk.CTk):
         
         self.hotkey_name = "f8"
         self.is_binding = False
-        self.is_catching_key = False # Yeni tuş ekleme modunu kontrol eder
+        self.is_catching_key = False
         
         self.profiles_file = "profiles.json"
         self.profiles = self.load_profiles_from_file()
@@ -144,7 +142,7 @@ class SpammerUI(ctk.CTk):
         self.btn_bind.pack(side="right", padx=5)
 
         # 3. BÖLÜM: Akıllı Tuş Ekleme Sistemi
-        self.lbl_keys = ctk.CTkLabel(self, text="Spamlanacak Tuşlar:", font=("Arial", 12))
+        self.lbl_keys = ctk.CTkLabel(self, text="Spamlanacak Tuş:", font=("Arial", 12))
         self.lbl_keys.pack(pady=(10, 0))
         
         self.frame_keys = ctk.CTkFrame(self, fg_color="transparent")
@@ -153,8 +151,8 @@ class SpammerUI(ctk.CTk):
         self.ent_keys = ctk.CTkEntry(self.frame_keys, width=220, placeholder_text="w, left vb.")
         self.ent_keys.pack(side="left", padx=(5, 5))
         
-        # Dinleme Butonu
-        self.btn_add_key = ctk.CTkButton(self.frame_keys, text="+ Ekle", width=80, fg_color="#2ECC71", hover_color="#27AE60", command=self.start_key_catch)
+        # Buton metni "+ Ekle" yerine "Seç" yapıldı
+        self.btn_add_key = ctk.CTkButton(self.frame_keys, text="Seç", width=80, fg_color="#2ECC71", hover_color="#27AE60", command=self.start_key_catch)
         self.btn_add_key.pack(side="left")
 
         # 4. BÖLÜM: Gecikme ve Durum
@@ -173,44 +171,83 @@ class SpammerUI(ctk.CTk):
 
     def setup_global_listener(self):
         keyboard.on_press(self._on_key_event)
-        mouse.hook(self._on_mouse_event) # Fare olaylarını dinlemeye başla
+        mouse.hook(self._on_mouse_event) 
+
+    # --- YENİ AKTİF DONANIM TARAMA (POLLING) MANTIKLARI ---
 
     def start_key_catch(self):
-        """Tuş/Fare dinleme modunu başlatır."""
         if self.backend.running:
             self.backend.stop()
         
-        # Buton rengini turuncu yaparak dinlediğimizi belli edelim
         self.btn_add_key.configure(text="Dinleniyor...", state="disabled", fg_color="#f39c12")
-        # Kendi fare tıklamamızın dinleyiciye düşmemesi için çok küçük bir gecikme
-        self.after(150, self._enable_key_catch)
+        threading.Thread(target=self._catch_input_loop, daemon=True).start()
         
-    def _enable_key_catch(self):
-        self.is_catching_key = True
-
-    def append_to_keys(self, new_val):
-        """Algılanan tuşu metin kutusuna yazar, öncekini tamamen siler."""
-        # Kutunun içindeki her şeyi (baştan sona) sil
-        self.ent_keys.delete(0, 'end')
-        
-        # Sadece yeni algılanan tuşu ekle
-        self.ent_keys.insert(0, new_val)
+    def _catch_input_loop(self):
+        # Arayüz butonuna tıklamak için kullanılan fiziksel sol tık bırakılana kadar bekler
+        try:
+            while mouse.is_pressed('left'):
+                time.sleep(0.01)
+        except Exception:
+            pass
             
-        # Butonu normal görünümüne geri döndür
-        self.btn_add_key.configure(text="+ Ekle", state="normal", fg_color="#2ECC71")
+        time.sleep(0.05)
+        self.is_catching_key = True
+        
+        # Aktif fare tarama döngüsü (Arayüz odağından etkilenmez)
+        mouse_buttons = ['left', 'right', 'middle', 'x', 'x2']
+        while self.is_catching_key:
+            for btn in mouse_buttons:
+                try:
+                    if mouse.is_pressed(btn):
+                        self.is_catching_key = False
+                        self.after(0, self.append_to_keys, btn)
+                        return
+                except Exception:
+                    pass
+            time.sleep(0.01)
+
+    def start_binding(self):
+        if self.backend.running:
+            self.backend.stop()
+            
+        self.btn_bind.configure(text="Basın...", state="disabled", fg_color="#f39c12")
+        self.lbl_status.configure(text="YENİ TUŞ BEKLENİYOR", text_color="#f39c12")
+        threading.Thread(target=self._bind_input_loop, daemon=True).start()
+
+    def _bind_input_loop(self):
+        try:
+            while mouse.is_pressed('left'):
+                time.sleep(0.01)
+        except Exception:
+            pass
+            
+        time.sleep(0.05)
+        self.is_binding = True
+        
+        mouse_buttons = ['left', 'right', 'middle', 'x', 'x2']
+        while self.is_binding:
+            for btn in mouse_buttons:
+                try:
+                    if mouse.is_pressed(btn):
+                        self.is_binding = False
+                        self.after(0, self.update_hotkey, btn)
+                        self.after(0, lambda: self.btn_bind.configure(text="Tuşu Değiştir", state="normal", fg_color="#3498DB"))
+                        return
+                except Exception:
+                    pass
+            time.sleep(0.01)
+
+    # --- OLAY DİNLEYİCİLERİ ---
 
     def _on_key_event(self, event):
-        # Akıllı ekleme modu açıksa klavyeden geleni al
         if self.is_catching_key:
             self.is_catching_key = False
             self.after(0, self.append_to_keys, event.name)
             return
 
-        # Kısayol değiştirme modu açıksa
         if self.is_binding:
             self.is_binding = False
-            new_key = event.name
-            self.after(0, self.update_hotkey, new_key)
+            self.after(0, self.update_hotkey, event.name)
             self.after(0, lambda: self.btn_bind.configure(text="Tuşu Değiştir", state="normal", fg_color="#3498DB"))
             return
 
@@ -218,12 +255,18 @@ class SpammerUI(ctk.CTk):
             self.backend.toggle()
 
     def _on_mouse_event(self, event):
-        # Sadece fare tuşuna BASILDIĞINDA (aşağı inerken) tepki ver, hareketleri filtrele
         if isinstance(event, mouse.ButtonEvent) and event.event_type == 'down':
-            if self.is_catching_key:
-                self.is_catching_key = False
-                self.after(0, self.append_to_keys, event.button) # left, right veya middle döner
-                return
+            # Farenin bir tuşu kısayol olarak atandıysa makroyu tetikler
+            if event.button == self.hotkey_name:
+                self.backend.toggle()
+
+    # --- YARDIMCI FONKSİYONLAR ---
+
+    def append_to_keys(self, new_val):
+        # Önceki içeriği temizler ve yerine yenisini yazar
+        self.ent_keys.delete(0, 'end')
+        self.ent_keys.insert(0, new_val)
+        self.btn_add_key.configure(text="Seç", state="normal", fg_color="#2ECC71")
 
     def update_hotkey(self, new_key):
         if self.backend.running:
@@ -232,14 +275,6 @@ class SpammerUI(ctk.CTk):
         self.hotkey_name = new_key
         self.lbl_hotkey.configure(text=f"Kısayol: {self.hotkey_name.upper()}")
         self.update_status(False)
-
-    def start_binding(self):
-        if self.backend.running:
-            self.backend.stop()
-            
-        self.is_binding = True
-        self.btn_bind.configure(text="Basın...", state="disabled", fg_color="#f39c12")
-        self.lbl_status.configure(text="YENİ TUŞ BEKLENİYOR", text_color="#f39c12")
 
     def load_initial_profile(self):
         if self.profiles:
