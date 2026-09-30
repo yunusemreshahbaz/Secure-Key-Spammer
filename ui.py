@@ -2,9 +2,10 @@ import customtkinter as ctk
 from engines import KeyboardEngine, MouseEngine
 from profile_manager import ProfileManager
 from input_manager import InputManager
+from interfaces import IEngine, IProfileManager, IInputManager
 
 class SpammerUI(ctk.CTk):
-    def __init__(self):
+    def __init__(self, kbd_engine: IEngine, mouse_engine: IEngine, profile_manager: IProfileManager, input_manager: IInputManager):
         super().__init__()
         self.title("MC AutoKey & Clicker")
         self.geometry("520x650")
@@ -13,14 +14,12 @@ class SpammerUI(ctk.CTk):
         ctk.set_appearance_mode("dark")
         ctk.set_default_color_theme("blue")
 
-        # 1. DEPENDENCY INJECTION (Sınıfların Başlatılması)
-        self.kbd_engine = KeyboardEngine(self.update_status)
-        self.mouse_engine = MouseEngine(self.update_status)
-        self.profile_manager = ProfileManager()
-        self.input_manager = InputManager()
+        # Dependency Inversion: Somut sınıflara değil, soyutlamalara bağlıyız (Type Hinting ile belirttik)
+        self.kbd_engine = kbd_engine
+        self.mouse_engine = mouse_engine
+        self.profile_manager = profile_manager
+        self.input_manager = input_manager
         
-        # 2. EVENT BINDING (Arka plandan arayüze veri aktarımı)
-        # .after(0, ...) kullanımı Thread çatışmalarını engeller
         self.input_manager.on_toggle = lambda: self.after(0, self.toggle_active_spammer)
         self.input_manager.on_key_caught = lambda key: self.after(0, self._on_key_caught, key)
         self.input_manager.on_hotkey_bound = lambda key: self.after(0, self._on_hotkey_bound, key)

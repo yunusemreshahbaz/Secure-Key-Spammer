@@ -2,8 +2,9 @@ import threading
 import time
 import keyboard
 import mouse
+from interfaces import IEngine
 
-class KeyboardEngine:
+class KeyboardEngine(IEngine):
     def __init__(self, on_status_change):
         self.running = False
         self.key = ""
@@ -28,7 +29,6 @@ class KeyboardEngine:
     def _spam_loop(self):
         while self.running:
             try:
-                # Fiziksel olarak tuşa basılı tutulmuyorsa spamla
                 if not keyboard.is_pressed(self.key):
                     keyboard.press(self.key)
                     time.sleep(0.005)
@@ -37,7 +37,7 @@ class KeyboardEngine:
                 pass
             time.sleep(max(0.01, self.delay))
 
-class MouseEngine:
+class MouseEngine(IEngine):
     def __init__(self, on_status_change):
         self.running = False
         self.on_status_change = on_status_change

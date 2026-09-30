@@ -1,7 +1,8 @@
 import json
 import os
+from interfaces import IProfileManager
 
-class ProfileManager:
+class ProfileManager(IProfileManager):
     def __init__(self, filename="profiles.json"):
         self.filename = filename
         self.profiles = self._load()

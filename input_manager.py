@@ -2,14 +2,14 @@ import threading
 import time
 import keyboard
 import mouse
+from interfaces import IInputManager
 
-class InputManager:
+class InputManager(IInputManager):
     def __init__(self):
         self.hotkey_name = "f8"
         self.is_binding = False
         self.is_catching_key = False
         
-        # Olay (Event) Tetikleyicileri
         self.on_toggle = None
         self.on_key_caught = None
         self.on_hotkey_bound = None
