@@ -1,6 +1,7 @@
 import threading
 import time
 import keyboard
+import mouse # FARE KÜTÜPHANESİ EKLENDİ
 import customtkinter as ctk
 import json
 import os
@@ -8,16 +9,30 @@ import os
 class SpammerBackend:
     def __init__(self, update_ui_callback):
         self.running = False
-        self.keys = []
+        self.keyboard_keys = []
+        self.mouse_buttons = [] # FARE TUŞLARI İÇİN YENİ LİSTE
         self.delay = 0.1
         self.update_ui = update_ui_callback
 
     def set_params(self, keys_str, delay):
-        self.keys = [k.strip().lower() for k in keys_str.split(',') if k.strip()]
+        self.keyboard_keys = []
+        self.mouse_buttons = []
+        
+        # Girişi virgülle ayırıp temizle
+        all_keys = [k.strip().lower() for k in keys_str.split(',') if k.strip()]
+        
+        # Klavyeyi mi fareyi mi kontrol edeceklerini ayrıştır
+        for k in all_keys:
+            if k in ['left', 'right', 'middle']:
+                self.mouse_buttons.append(k)
+            else:
+                self.keyboard_keys.append(k)
+                
         self.delay = delay
 
     def toggle(self):
-        if not self.keys:
+        # Hiçbir tuş girilmemişse başlatma
+        if not self.keyboard_keys and not self.mouse_buttons:
             return
         
         self.running = not self.running
@@ -32,13 +47,35 @@ class SpammerBackend:
 
     def _spam_loop(self):
         while self.running:
-            for key in self.keys:
-                keyboard.press(key)
+            # KLAVYE tuşlarına bas
+            for key in self.keyboard_keys:
+                try:
+                    keyboard.press(key)
+                except Exception:
+                    pass
+                    
+            # FARE tuşlarına bas
+            for btn in self.mouse_buttons:
+                try:
+                    mouse.press(button=btn)
+                except Exception:
+                    pass
             
             time.sleep(0.005) 
             
-            for key in self.keys:
-                keyboard.release(key)
+            # KLAVYE tuşlarını bırak
+            for key in self.keyboard_keys:
+                try:
+                    keyboard.release(key)
+                except Exception:
+                    pass
+                    
+            # FARE tuşlarını bırak
+            for btn in self.mouse_buttons:
+                try:
+                    mouse.release(button=btn)
+                except Exception:
+                    pass
             
             time.sleep(max(0.01, self.delay))
 
@@ -46,7 +83,7 @@ class SpammerUI(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title("MC AutoKey Spammer")
-        self.geometry("350x520")
+        self.geometry("350x550") # Fare ipucu için pencereyi biraz daha uzattık
         self.resizable(False, False)
         
         ctk.set_appearance_mode("dark")
@@ -55,13 +92,13 @@ class SpammerUI(ctk.CTk):
         self.backend = SpammerBackend(self.update_status)
         
         self.hotkey_name = "f8"
-        self.is_binding = False # Tuş dinleme modunda mıyız kontrolü
+        self.is_binding = False
         
         self.profiles_file = "profiles.json"
         self.profiles = self.load_profiles_from_file()
 
         self.setup_ui()
-        self.setup_global_listener() # Yeni global dinleyiciyi başlat
+        self.setup_global_listener()
         self.load_initial_profile()
 
     def load_profiles_from_file(self):
@@ -103,10 +140,11 @@ class SpammerUI(ctk.CTk):
         self.btn_bind.pack(side="right", padx=5)
 
         # 3. BÖLÜM: Tuş ve Gecikme Ayarları
-        self.lbl_keys = ctk.CTkLabel(self, text="Spamlanacak Tuşlar (w, space):", font=("Arial", 12))
+        # Fare tuşları için ipucu eklendi
+        self.lbl_keys = ctk.CTkLabel(self, text="Tuşlar (w, space, left, right):", font=("Arial", 12))
         self.lbl_keys.pack(pady=(10, 0))
         
-        self.ent_keys = ctk.CTkEntry(self, width=250, placeholder_text="w, space")
+        self.ent_keys = ctk.CTkEntry(self, width=250, placeholder_text="w, left")
         self.ent_keys.pack(pady=5)
 
         self.lbl_delay = ctk.CTkLabel(self, text="Gecikme (Saniye):", font=("Arial", 12))
@@ -124,21 +162,16 @@ class SpammerUI(ctk.CTk):
         self.lbl_status.pack(pady=5)
 
     def setup_global_listener(self):
-        """Klavye olaylarını en alt seviyeden, sürekli dinleyen ana fonksiyon."""
         keyboard.on_press(self._on_key_event)
 
     def _on_key_event(self, event):
-        """Tuşa basıldığında ne yapılacağına karar verir."""
-        # Eğer tuş atama modundaysak
         if self.is_binding:
             self.is_binding = False
             new_key = event.name
-            # Arayüzü ana thread üzerinde güvenle güncelle
             self.after(0, self.update_hotkey, new_key)
             self.after(0, lambda: self.btn_bind.configure(text="Tuşu Değiştir", state="normal"))
             return
 
-        # Normal çalışma modu: Basılan tuş bizim kısayolumuz ise
         if event.name == self.hotkey_name:
             self.backend.toggle()
 
@@ -154,7 +187,7 @@ class SpammerUI(ctk.CTk):
         if self.backend.running:
             self.backend.stop()
             
-        self.is_binding = True # Dinleme modunu aç
+        self.is_binding = True
         self.btn_bind.configure(text="Basın...", state="disabled")
         self.lbl_status.configure(text="YENİ TUŞ BEKLENİYOR", text_color="#f39c12")
 
