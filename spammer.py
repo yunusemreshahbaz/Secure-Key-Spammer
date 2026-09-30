@@ -189,18 +189,14 @@ class SpammerUI(ctk.CTk):
         self.is_catching_key = True
 
     def append_to_keys(self, new_val):
-        """Algılanan tuşu metin kutusunun sonuna virgülle ekler."""
-        current_val = self.ent_keys.get().strip()
+        """Algılanan tuşu metin kutusuna yazar, öncekini tamamen siler."""
+        # Kutunun içindeki her şeyi (baştan sona) sil
+        self.ent_keys.delete(0, 'end')
         
-        if current_val:
-            if current_val.endswith(','):
-                self.ent_keys.insert('end', f" {new_val}")
-            else:
-                self.ent_keys.insert('end', f", {new_val}")
-        else:
-            self.ent_keys.insert('end', new_val)
+        # Sadece yeni algılanan tuşu ekle
+        self.ent_keys.insert(0, new_val)
             
-        # Butonu eski haline getir
+        # Butonu normal görünümüne geri döndür
         self.btn_add_key.configure(text="+ Ekle", state="normal", fg_color="#2ECC71")
 
     def _on_key_event(self, event):
