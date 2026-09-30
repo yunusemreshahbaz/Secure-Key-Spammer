@@ -27,25 +27,19 @@ class SpammerBackend:
             threading.Thread(target=self._spam_loop, daemon=True).start()
 
     def stop(self):
-        """Dışarıdan zorla durdurmak için güvenli metot."""
         self.running = False
         self.update_ui(self.running)
 
     def _spam_loop(self):
         while self.running:
-            # Tüm tuşlara aynı anda bas
             for key in self.keys:
                 keyboard.press(key)
             
-            # İŞLETİM SİSTEMİNE NEFES PAYI (5 milisaniye)
-            # Hem Minecraft'ın tuşu algılamasını garantiler, hem de durdurma tuşuna öncelik verir.
             time.sleep(0.005) 
             
-            # Tüm tuşları bırak
             for key in self.keys:
                 keyboard.release(key)
             
-            # Gecikmeyi en az 0.01 sn ile sınırla ki CPU %100'e kilitlenmesin
             time.sleep(max(0.01, self.delay))
 
 class SpammerUI(ctk.CTk):
@@ -61,13 +55,13 @@ class SpammerUI(ctk.CTk):
         self.backend = SpammerBackend(self.update_status)
         
         self.hotkey_name = "f8"
-        self.hotkey_hook = None
+        self.is_binding = False # Tuş dinleme modunda mıyız kontrolü
         
         self.profiles_file = "profiles.json"
         self.profiles = self.load_profiles_from_file()
 
         self.setup_ui()
-        self.update_hotkey("f8") # Varsayılan kısayolu bağla
+        self.setup_global_listener() # Yeni global dinleyiciyi başlat
         self.load_initial_profile()
 
     def load_profiles_from_file(self):
@@ -98,7 +92,7 @@ class SpammerUI(ctk.CTk):
         self.btn_save_profile = ctk.CTkButton(self.frame_profile, text="Geçerli Ayarları Kaydet", command=self.save_current_profile)
         self.btn_save_profile.pack(pady=(0, 10), padx=10, fill="x")
 
-        # 2. BÖLÜM: Kısayol Ayarı (YENİ)
+        # 2. BÖLÜM: Kısayol Ayarı
         self.frame_hotkey = ctk.CTkFrame(self, fg_color="transparent")
         self.frame_hotkey.pack(pady=5, padx=20, fill="x")
         
@@ -129,51 +123,40 @@ class SpammerUI(ctk.CTk):
         self.lbl_status = ctk.CTkLabel(self, text="DURUYOR", text_color="#ff4c4c", font=("Arial", 16, "bold"))
         self.lbl_status.pack(pady=5)
 
+    def setup_global_listener(self):
+        """Klavye olaylarını en alt seviyeden, sürekli dinleyen ana fonksiyon."""
+        keyboard.on_press(self._on_key_event)
+
+    def _on_key_event(self, event):
+        """Tuşa basıldığında ne yapılacağına karar verir."""
+        # Eğer tuş atama modundaysak
+        if self.is_binding:
+            self.is_binding = False
+            new_key = event.name
+            # Arayüzü ana thread üzerinde güvenle güncelle
+            self.after(0, self.update_hotkey, new_key)
+            self.after(0, lambda: self.btn_bind.configure(text="Tuşu Değiştir", state="normal"))
+            return
+
+        # Normal çalışma modu: Basılan tuş bizim kısayolumuz ise
+        if event.name == self.hotkey_name:
+            self.backend.toggle()
+
     def update_hotkey(self, new_key):
-        """Eski kısayolu silip yenisini güvenli şekilde atar."""
         if self.backend.running:
             self.backend.stop()
-            
-        if self.hotkey_hook:
-            try:
-                keyboard.remove_hotkey(self.hotkey_hook)
-            except Exception:
-                pass
                 
         self.hotkey_name = new_key
-        self.hotkey_hook = keyboard.add_hotkey(self.hotkey_name, self.backend.toggle)
         self.lbl_hotkey.configure(text=f"Kısayol: {self.hotkey_name.upper()}")
         self.update_status(False)
 
     def start_binding(self):
-        """Tuş dinleme modunu başlatır (Makroyu durdurarak)."""
         if self.backend.running:
             self.backend.stop()
             
-        # Dinleme sırasında eski tuş tetiklenmesin diye kaldırıyoruz
-        if self.hotkey_hook:
-            try:
-                keyboard.remove_hotkey(self.hotkey_hook)
-                self.hotkey_hook = None
-            except Exception:
-                pass
-                
+        self.is_binding = True # Dinleme modunu aç
         self.btn_bind.configure(text="Basın...", state="disabled")
         self.lbl_status.configure(text="YENİ TUŞ BEKLENİYOR", text_color="#f39c12")
-        
-        threading.Thread(target=self.wait_for_key, daemon=True).start()
-
-    def wait_for_key(self):
-        """Kullanıcı bir tuşa basana kadar bekler ve onu kaydeder."""
-        # suppress=True ile basılan tuşun işletim sistemine veya oyuna gitmesini engelleriz
-        while True:
-            event = keyboard.read_event(suppress=True)
-            if event.event_type == keyboard.KEY_DOWN:
-                new_key = event.name
-                # Arayüz güncellemeleri ana thread'de yapılmalı
-                self.after(0, self.update_hotkey, new_key)
-                self.after(0, lambda: self.btn_bind.configure(text="Tuşu Değiştir", state="normal"))
-                break
 
     def load_initial_profile(self):
         if self.profiles:
