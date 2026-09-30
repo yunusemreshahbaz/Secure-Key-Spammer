@@ -1,0 +1,2 @@
+# Kurulması Gereken Kütüphaneler:
+pip install keyboard customtkinter pyinstaller
