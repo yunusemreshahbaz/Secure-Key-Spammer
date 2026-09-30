@@ -1,2 +1,3 @@
 # Kurulması Gereken Kütüphaneler:
 pip install keyboard customtkinter pyinstaller
+pip install mouse
