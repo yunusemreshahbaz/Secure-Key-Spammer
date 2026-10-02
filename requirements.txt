@@ -1,3 +1,10 @@
 # Kurulması Gereken Kütüphaneler:
 pip install keyboard customtkinter pyinstaller
 pip install mouse
+pip install pynput
+
+# Kütüphaneleri Sil:
+pip uninstall keyboard mouse -y
+
+# Uygulamaya Çevir:
+pyinstaller --noconsole --onefile --collect-all customtkinter spammer.py

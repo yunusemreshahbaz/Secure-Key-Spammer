@@ -1,8 +1,6 @@
-import threading
-import time
-import keyboard
-import mouse
+from pynput import keyboard, mouse
 from interfaces import IInputManager
+import time
 
 class InputManager(IInputManager):
     def __init__(self):
@@ -13,83 +11,91 @@ class InputManager(IInputManager):
         self.on_toggle = None
         self.on_key_caught = None
         self.on_hotkey_bound = None
+        
+        self.mouse_controller = mouse.Controller()
+        
+        self.kbd_listener = None
+        self.mouse_listener = None
+        
+        # Olay bayrakları (Thread kilitlenmelerini önlemek için)
+        self._picking_location = False
+        self._location_callback = None
 
     def setup_listeners(self):
-        keyboard.on_press(self._on_key_event)
-        mouse.hook(self._on_mouse_event)
+        # Listener'ları başlat
+        self.kbd_listener = keyboard.Listener(on_press=self._on_key_press)
+        self.kbd_listener.start()
+        
+        self.mouse_listener = mouse.Listener(on_click=self._on_mouse_click)
+        self.mouse_listener.start()
 
     def set_hotkey(self, key):
-        self.hotkey_name = key
+        self.hotkey_name = str(key).replace("'", "") # 'w' formatını düzeltir
 
-    def _on_key_event(self, event):
+    def _format_key(self, key):
+        """Pynput'un karmaşık tuş objelerini temiz stringlere dönüştürür."""
+        try:
+            # Harf tuşları için (char)
+            return key.char.lower()
+        except AttributeError:
+            # Özel tuşlar için (Key.space, Key.f8 vb.)
+            return key.name.lower()
+
+    def _format_mouse_btn(self, button):
+        """Pynput fare objesini stringe dönüştürür."""
+        return button.name.lower() # left, right, middle
+
+    def _on_key_press(self, key):
+        if key is None: return
+        key_str = self._format_key(key)
+
         if self.is_catching_key:
             self.is_catching_key = False
-            if self.on_key_caught: self.on_key_caught(event.name)
+            if self.on_key_caught: self.on_key_caught(key_str)
             return
 
         if self.is_binding:
             self.is_binding = False
-            if self.on_hotkey_bound: self.on_hotkey_bound(event.name)
+            if self.on_hotkey_bound: self.on_hotkey_bound(key_str)
             return
 
-        if event.name == self.hotkey_name:
+        if key_str == self.hotkey_name:
             if self.on_toggle: self.on_toggle()
 
-    def _on_mouse_event(self, event):
-        if isinstance(event, mouse.ButtonEvent) and event.event_type == 'down':
-            if event.button == self.hotkey_name:
-                if self.on_toggle: self.on_toggle()
+    def _on_mouse_click(self, x, y, button, pressed):
+        if not pressed: return # Sadece tuşa basıldığında (aşağı inerken) tepki ver
+        
+        btn_str = self._format_mouse_btn(button)
+
+        # Konum seçme modu
+        if self._picking_location and btn_str == 'left':
+            self._picking_location = False
+            if self._location_callback: self._location_callback(int(x), int(y))
+            return
+
+        # Klavye tuşu seçerken yanlışlıkla fareye basmayı engelle (sadece klavye istiyoruz)
+        # Eğer özel olarak istenirse buraya fare tuşu ekleme mantığı eklenebilir.
+        if self.is_catching_key:
+            return 
+            
+        if self.is_binding:
+            self.is_binding = False
+            if self.on_hotkey_bound: self.on_hotkey_bound(btn_str)
+            return
+
+        if btn_str == self.hotkey_name:
+            if self.on_toggle: self.on_toggle()
 
     def start_key_catch(self):
-        threading.Thread(target=self._catch_input_loop, daemon=True).start()
-        
-    def _catch_input_loop(self):
-        try:
-            while mouse.is_pressed('left'): time.sleep(0.01)
-        except Exception: pass
-        
-        time.sleep(0.05)
+        # Biraz bekle ki butona tıkladığımız an algılanmasın
+        time.sleep(0.1)
         self.is_catching_key = True
-        
-        mouse_buttons = ['left', 'right', 'middle', 'x', 'x2']
-        while self.is_catching_key:
-            for btn in mouse_buttons:
-                try:
-                    if mouse.is_pressed(btn):
-                        self.is_catching_key = False
-                        if self.on_key_caught: self.on_key_caught(btn)
-                        return
-                except Exception: pass
-            time.sleep(0.01)
 
     def start_binding(self):
-        threading.Thread(target=self._bind_input_loop, daemon=True).start()
-
-    def _bind_input_loop(self):
-        try:
-            while mouse.is_pressed('left'): time.sleep(0.01)
-        except Exception: pass
-        
-        time.sleep(0.05)
+        time.sleep(0.1)
         self.is_binding = True
-        
-        mouse_buttons = ['left', 'right', 'middle', 'x', 'x2']
-        while self.is_binding:
-            for btn in mouse_buttons:
-                try:
-                    if mouse.is_pressed(btn):
-                        self.is_binding = False
-                        if self.on_hotkey_bound: self.on_hotkey_bound(btn)
-                        return
-                except Exception: pass
-            time.sleep(0.01)
 
     def wait_for_location_click(self, callback):
-        threading.Thread(target=self._wait_location_click, args=(callback,), daemon=True).start()
-
-    def _wait_location_click(self, callback):
-        time.sleep(0.2) 
-        while not mouse.is_pressed('left'):
-            time.sleep(0.01)
-        x, y = mouse.get_position()
-        if callback: callback(x, y)
+        time.sleep(0.1)
+        self._location_callback = callback
+        self._picking_location = True

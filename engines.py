@@ -1,7 +1,7 @@
 import threading
 import time
-import keyboard
-import mouse
+from pynput.keyboard import Controller as KbdController, Key
+from pynput.mouse import Controller as MouseController, Button
 from interfaces import IEngine
 
 class KeyboardEngine(IEngine):
@@ -10,9 +10,18 @@ class KeyboardEngine(IEngine):
         self.key = ""
         self.delay = 0.1
         self.on_status_change = on_status_change
+        self.keyboard = KbdController()
+        
+        # Pynput özel tuşları için eşleştirme
+        self.special_keys = {
+            'space': Key.space, 'enter': Key.enter, 'shift': Key.shift,
+            'ctrl': Key.ctrl, 'alt': Key.alt, 'tab': Key.tab, 'esc': Key.esc
+        }
 
     def set_params(self, key_str, delay):
-        self.key = key_str.strip().lower()
+        key_str = key_str.strip().lower()
+        # Eğer özel tuşsa pynput nesnesini al, değilse string olarak bırak
+        self.key = self.special_keys.get(key_str, key_str)
         self.delay = delay
 
     def toggle(self):
@@ -29,10 +38,9 @@ class KeyboardEngine(IEngine):
     def _spam_loop(self):
         while self.running:
             try:
-                if not keyboard.is_pressed(self.key):
-                    keyboard.press(self.key)
-                    time.sleep(0.005)
-                    keyboard.release(self.key)
+                self.keyboard.press(self.key)
+                time.sleep(0.005)
+                self.keyboard.release(self.key)
             except Exception:
                 pass
             time.sleep(max(0.01, self.delay))
@@ -41,9 +49,10 @@ class MouseEngine(IEngine):
     def __init__(self, on_status_change):
         self.running = False
         self.on_status_change = on_status_change
+        self.mouse = MouseController()
         
         self.interval = 0.1
-        self.button = "left"
+        self.button = Button.left
         self.click_type = "Single"
         self.repeat_mode = "until_stopped"
         self.repeat_times = 1
@@ -51,10 +60,12 @@ class MouseEngine(IEngine):
         self.pos_x = 0
         self.pos_y = 0
 
-    def set_params(self, interval, button, click_type, repeat_mode, repeat_times, pos_mode, pos_x, pos_y):
+    def set_params(self, interval, button_str, click_type, repeat_mode, repeat_times, pos_mode, pos_x, pos_y):
         self.interval = max(0.01, interval)
-        btn_map = {"Sol Tık": "left", "Sağ Tık": "right", "Orta Tık": "middle"}
-        self.button = btn_map.get(button, "left")
+        
+        btn_map = {"Sol Tık": Button.left, "Sağ Tık": Button.right, "Orta Tık": Button.middle}
+        self.button = btn_map.get(button_str, Button.left)
+        
         self.click_type = click_type
         self.repeat_mode = repeat_mode
         self.repeat_times = repeat_times
@@ -76,13 +87,11 @@ class MouseEngine(IEngine):
         count = 0
         while self.running:
             if self.pos_mode == "picked":
-                mouse.move(self.pos_x, self.pos_y)
+                self.mouse.position = (self.pos_x, self.pos_y)
 
             try:
-                if self.click_type == "Double":
-                    mouse.double_click(button=self.button)
-                else:
-                    mouse.click(button=self.button)
+                click_count = 2 if self.click_type == "Double" else 1
+                self.mouse.click(self.button, click_count)
             except Exception:
                 pass
 
